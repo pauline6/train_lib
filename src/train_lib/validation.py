@@ -16,12 +16,12 @@ class Evaluator:
     metric_ckpt: Optional[ModelCheckpoint]
 
 
-def validation_evaluator(name: str, val_engine: Engine, val_loader: DataLoader, event: Events,
-                         val_metrics: Optional[dict[str, Metric]] = None, metric_checkpoint: Optional[str] = None):
-    evaluator = Evaluator(name=name, engine=val_engine, loader=val_loader, event=event, metric_ckpt=metric_checkpoint)
+def validation_evaluator(name: str, engine: Engine, loader: DataLoader, event: Events,
+                         metrics: Optional[dict[str, Metric]] = None, metric_checkpoint: Optional[str] = None):
+    evaluator = Evaluator(name=name, engine=engine, loader=loader, event=event, metric_ckpt=metric_checkpoint)
 
-    if val_metrics is not None:
-        for name, metric in val_metrics.items():
-            metric.attach(val_engine, name)
+    if metrics is not None:
+        for name, metric in metrics.items():
+            metric.attach(engine, name)
 
     return evaluator

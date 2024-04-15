@@ -45,33 +45,34 @@ class Trainer:
 
     def add_validation(self,
                        name: str,
-                       val_engine: Engine,
-                       val_loader: DataLoader,
+                       engine: Engine,
+                       loader: DataLoader,
                        event: Events,
-                       val_metrics: Optional[dict[str, Metric]] = None,
+                       metrics: Optional[dict[str, Metric]] = None,
                        metric_checkpoint: Optional[str] = None):
         """Add a validation phase during the training.
 
         Args:
             name (str): Validation name.
-            val_engine (Engine): Validation engine.
-            val_loader (DataLoader): Validation DataLoader.
+            engine (Engine): Validation engine.
+            loader (DataLoader): Validation DataLoader.
             event (Events): When the validation started in relation to the training engine timeline.
-            val_metrics (Optional[dict[str, Metric]], optional): Metrics. Defaults to None.
+            metrics (Optional[dict[str, Metric]], optional): Metrics. Defaults to None.
             model_checkpoint (Optional[ModelCheckpoint], optional): Module to save model checkpoints. Defaults to None.
         """
-        evaluator = validation_evaluator(name=name, engine=val_engine, loader=val_loader, event=event, 
-                                         metric_ckpt=metric_checkpoint)
+        evaluator = validation_evaluator(name=name, engine=engine, loader=loader, event=event, metrics=metrics,
+                                         metric_checkpoint=metric_checkpoint)
         self.evaluators.append(evaluator)
     
     def add_inference(self: Self,
                       name: str,
-                      infer_engine: Engine,
-                      infer_loader: DataLoader,
+                      engine: Engine,
+                      loader: DataLoader,
                       event: Events,
                       output_transform: Callable,
-                      type: str = ["image" | "figure"]) -> None:
-        infercer = inference_configuration(name, type, infer_engine, infer_loader, event, output_transform)
+                      type_infer: str) -> None:
+        infercer = inference_configuration(name=name, type_infer=type_infer, engine=engine, loader=loader,
+                                           event=event, output_transform=output_transform)
         self.inferencers.append(infercer)
 
     def train(self):
@@ -96,6 +97,8 @@ class Trainer:
             for key, value in self.losses.items():
                 mean_loss = np.mean(np.array(value))
                 print(f"{key}: {mean_loss:.2f}")
+                key = "training/" + key
+                self.tb_logger.writer.add_scalar(key, mean_loss)
             self.losses = {}
 
         for evaluator in self.evaluators:
@@ -127,6 +130,8 @@ class Trainer:
                 for key, value in self.losses.items():
                     mean_loss = np.mean(np.array(value))
                     print(f"{key}: {mean_loss:.2f}")
+                    key = evaluator.name + "/" + key
+                    self.tb_logger.writer.add_scalar(key, mean_loss)
                 self.losses = {}
 
             if evaluator.metric_ckpt is not None:
@@ -142,7 +147,8 @@ class Trainer:
                     global_step_transform=global_step_from_engine(self.train_engine))
 
                 evaluator.engine.add_event_handler(evaluator.event, model_checkpoint, {"model": self.model})
-        
+
+            
         if self.metric_ckpt is not None:
             def score_function(engine: Engine):
                 return -engine.state.output["loss"][evaluator.metric_ckpt]
@@ -163,13 +169,13 @@ class Trainer:
                 inferencer.engine.run(inferencer.loader)
                 output = inferencer.engine.state.output
                 figure = inferencer.output_transform(output)
-                if inferencer.type == "figure":
+                if inferencer.type_infer == "figure":
                     self.tb_logger.writer.add_figure(tag=inferencer.name, figure=figure)
 
         self.tb_logger.attach_output_handler(
             self.train_engine,
             event_name=Events.ITERATION_COMPLETED,
-            tag="training",
+            tag="Loss training",
             output_transform=lambda loss: loss["loss"]
         )
 
